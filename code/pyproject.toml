@@ -1,0 +1,23 @@
+[project]
+name = "eunoform-companion"
+version = "0.1.0"
+description = "Humane, deterministic policy core for the Eunoform Companion"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0,<9",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["apps/companion-service"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
