@@ -80,9 +80,10 @@ The companion is **caring, gentle, friendly, and humane**. It:
 | [docs/03_00_Technical_Architecture_Plan.md](docs/03_00_Technical_Architecture_Plan.md) | High-level architecture summary |
 | [docs/03_01_Technical_Architecture_Expanded.md](docs/03_01_Technical_Architecture_Expanded.md) | Full hardware and system design recommendations |
 | [docs/03_02_AI_Model_Selection.md](docs/03_02_AI_Model_Selection.md) | Model evaluation and deployment guide |
+| [docs/04_MVP_Specification.md](docs/04_MVP_Specification.md) | First testable humane interaction loop, scope, policy rules, and acceptance criteria |
 
 ---
 
 ## Status
 
-> Early research and architecture phase. No code yet.
+> MVP definition phase. The software-first humane interaction loop is specified; implementation has not yet begun.
