@@ -61,6 +61,7 @@ class StatusResponse(BaseModel):
     active_deferral: dict | None
     active_quiet_interval: dict | None
     current_nudge: dict | None
+    next_evaluation_at: datetime | None
     settings: dict
 
 

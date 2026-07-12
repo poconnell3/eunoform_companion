@@ -67,6 +67,7 @@ const emptyStatus = (state: InteractionState): CompanionStatus => ({
   active_deferral: state === "deferred" ? { expires_at: new Date(Date.now() + 600_000).toISOString() } : null,
   active_quiet_interval: state === "quiet" ? { ends_at: new Date(Date.now() + 600_000).toISOString() } : null,
   current_nudge: ["attracting_attention", "awaiting_response", "explaining"].includes(state) ? { id: "mock-nudge" } : null,
+  next_evaluation_at: state === "focusing" ? new Date(Date.now() + 600_000).toISOString() : null,
   settings: { interaction_intensity: "medium", visual_lead_in_seconds: 1, quiet_default_minutes: 30 },
 });
 

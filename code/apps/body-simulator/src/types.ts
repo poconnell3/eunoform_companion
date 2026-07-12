@@ -31,6 +31,7 @@ export interface CompanionStatus {
   active_deferral: Record<string, unknown> | null;
   active_quiet_interval: Record<string, unknown> | null;
   current_nudge: Record<string, unknown> | null;
+  next_evaluation_at?: string | null;
   settings: Settings;
 }
 

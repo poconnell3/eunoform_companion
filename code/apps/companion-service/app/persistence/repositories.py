@@ -237,6 +237,27 @@ class SQLiteDeferralRepository:
             else None
         )
 
+    def latest_for_session(self, focus_session_id: str) -> Deferral | None:
+        with self.db.connect() as connection:
+            row = connection.execute(
+                "SELECT d.* FROM deferrals d "
+                "JOIN nudge_events n ON n.id=d.nudge_event_id "
+                "WHERE n.focus_session_id=? ORDER BY d.created_at DESC LIMIT 1",
+                (focus_session_id,),
+            ).fetchone()
+        return (
+            Deferral(
+                id=row["id"],
+                nudge_event_id=row["nudge_event_id"],
+                created_at=_dt(row["created_at"]),
+                duration_minutes=row["duration_minutes"],
+                expires_at=_dt(row["expires_at"]),
+                status=row["status"],
+            )
+            if row
+            else None
+        )
+
     def end_active(
         self,
         now: datetime,

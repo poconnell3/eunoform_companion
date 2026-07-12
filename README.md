@@ -95,9 +95,10 @@ The companion is **caring, gentle, friendly, and humane**. It:
 | [code/docs/05_Phase_1_Implementation_Notes.md](code/docs/05_Phase_1_Implementation_Notes.md) | Domain models, state machine, persistence, and Humane Policy Engine implementation notes |
 | [docs/06_Phase_2_API_Implementation_Notes.md](docs/06_Phase_2_API_Implementation_Notes.md) | Local FastAPI interface, endpoints, and testing notes |
 | [docs/07_Phase_3_Visual_Simulator_Implementation_Notes.md](docs/07_Phase_3_Visual_Simulator_Implementation_Notes.md) | Node.js visual body simulator, semantic behaviors, and local API integration |
+| [docs/08_Phase_4_Scheduler_Implementation_Notes.md](docs/08_Phase_4_Scheduler_Implementation_Notes.md) | Automatic policy scheduling, lifecycle management, and restart recovery |
 
 ---
 
 ## Status
 
-> Phase 3 visual body simulator implemented and tested. Background scheduling, voice, model integration, and physical hardware remain deferred.
+> Phase 4 automatic humane interaction loop implemented and tested. WebSockets, voice, model integration, and physical hardware remain deferred.
