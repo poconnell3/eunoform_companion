@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from app.domain.clock import FixedClock
+from app.domain.models import Deferral
 from app.main import create_app
 from fastapi.testclient import TestClient
 
@@ -22,10 +23,17 @@ def advance_to_nudge(client, clock):
 
 
 def assert_timed_state_consistent(status: dict) -> None:
-    is_quiet = status["interaction_state"] == "quiet"
-    is_deferred = status["interaction_state"] == "deferred"
-    assert is_quiet is (status["active_quiet_interval"] is not None)
-    assert is_deferred is (status["active_deferral"] is not None)
+    state = status["interaction_state"]
+    active_quiet = status["active_quiet_interval"]
+    active_deferral = status["active_deferral"]
+    if state == "quiet":
+        assert active_quiet is not None
+    else:
+        assert active_quiet is None
+    if state == "deferred":
+        assert active_deferral is not None
+    elif state != "quiet":
+        assert active_deferral is None
 
 
 def persisted_status(database_path: Path, table: str) -> str:
@@ -267,3 +275,107 @@ def test_natural_quiet_expiration_is_persisted(tmp_path):
         assert status["interaction_state"] == "focusing"
         assert_timed_state_consistent(status)
     assert persisted_status(database_path, "quiet_intervals") == "expired"
+
+
+def test_restart_restores_deferral_beneath_quiet(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    clock = FixedClock(START)
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        advance_to_nudge(client, clock)
+        client.post("/interactions/current/defer", json={"minutes": 30})
+        client.post("/interactions/current/quiet", json={"minutes": 10})
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        status = client.get("/status").json()
+        assert status["interaction_state"] == "quiet"
+        assert status["active_quiet_interval"] is not None
+        assert status["active_deferral"] is not None
+        assert_timed_state_consistent(status)
+        clock.set(START + timedelta(minutes=56))
+        status = client.get("/status").json()
+        assert status["interaction_state"] == "deferred"
+        assert status["active_quiet_interval"] is None
+        assert status["active_deferral"] is not None
+        assert_timed_state_consistent(status)
+        clock.set(START + timedelta(minutes=76))
+        status = client.get("/status").json()
+        assert status["interaction_state"] == "focusing"
+        assert_timed_state_consistent(status)
+
+
+def test_deferral_can_expire_beneath_active_quiet(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    clock = FixedClock(START)
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        advance_to_nudge(client, clock)
+        client.post("/interactions/current/defer", json={"minutes": 10})
+        client.post("/interactions/current/quiet", json={"minutes": 30})
+        clock.set(START + timedelta(minutes=56))
+        status = client.get("/status").json()
+        assert status["interaction_state"] == "quiet"
+        assert status["active_quiet_interval"] is not None
+        assert status["active_deferral"] is None
+        assert persisted_status(database_path, "deferrals") == "expired"
+        assert_timed_state_consistent(status)
+        clock.set(START + timedelta(minutes=76))
+        status = client.get("/status").json()
+        assert status["interaction_state"] == "focusing"
+        assert_timed_state_consistent(status)
+
+
+def test_cancelled_deferral_preserves_original_expiration(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    clock = FixedClock(START)
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        advance_to_nudge(client, clock)
+        client.post("/interactions/current/defer", json={"minutes": 30})
+        with sqlite3.connect(database_path) as connection:
+            original_expiration = connection.execute("SELECT expires_at FROM deferrals").fetchone()[
+                0
+            ]
+        client.post("/focus-sessions/current/stop")
+    with sqlite3.connect(database_path) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute("SELECT * FROM deferrals").fetchone()
+    assert row is not None
+    assert row["status"] == "cancelled"
+    assert row["expires_at"] == original_expiration
+    assert row["expires_at"] > row["created_at"]
+    assert row["duration_minutes"] == 30
+    restored = Deferral(
+        id=row["id"],
+        nudge_event_id=row["nudge_event_id"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        duration_minutes=row["duration_minutes"],
+        expires_at=datetime.fromisoformat(row["expires_at"]),
+        status=row["status"],
+    )
+    assert restored.status == "cancelled"
+
+
+def test_restart_during_plain_quiet_returns_to_focusing(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    clock = FixedClock(START)
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        client.post("/focus-sessions")
+        client.post("/interactions/current/quiet", json={"minutes": 10})
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        assert client.get("/status").json()["interaction_state"] == "quiet"
+        clock.set(START + timedelta(minutes=11))
+        status = client.get("/status").json()
+        assert status["interaction_state"] == "focusing"
+        assert_timed_state_consistent(status)
+
+
+def test_both_timed_controls_expire_before_status(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    clock = FixedClock(START)
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        advance_to_nudge(client, clock)
+        client.post("/interactions/current/defer", json={"minutes": 15})
+        client.post("/interactions/current/quiet", json={"minutes": 10})
+        clock.set(START + timedelta(minutes=61))
+        status = client.get("/status").json()
+        assert status["interaction_state"] == "focusing"
+        assert_timed_state_consistent(status)
+    assert persisted_status(database_path, "quiet_intervals") == "expired"
+    assert persisted_status(database_path, "deferrals") == "expired"

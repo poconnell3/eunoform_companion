@@ -250,10 +250,9 @@ class SQLiteDeferralRepository:
         active.status = status
         with self.db.connect() as connection:
             connection.execute(
-                "UPDATE deferrals SET expires_at=?, status=? WHERE id=?",
-                (now.isoformat(), status, active.id),
+                "UPDATE deferrals SET status=? WHERE id=?",
+                (status, active.id),
             )
-        active.expires_at = now
         return active
 
     def expire_active(self, now: datetime, focus_session_id: str | None = None) -> Deferral | None:

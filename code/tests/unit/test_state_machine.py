@@ -41,3 +41,10 @@ def test_quiet_mode_returns_to_safe_previous_state() -> None:
 
     assert machine.transition(InteractionCommand.ENTER_QUIET) is InteractionState.QUIET
     assert machine.transition(InteractionCommand.EXIT_QUIET) is InteractionState.FOCUSING
+
+
+def test_quiet_entered_from_deferred_returns_to_deferred() -> None:
+    machine = InteractionStateMachine(InteractionState.DEFERRED)
+
+    assert machine.transition(InteractionCommand.ENTER_QUIET) is InteractionState.QUIET
+    assert machine.transition(InteractionCommand.EXIT_QUIET) is InteractionState.DEFERRED

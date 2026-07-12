@@ -51,19 +51,24 @@ class CompanionApplicationService:
         self.deferral_repo = deferral_repo
         self.quiet_repo = quiet_repo
         self.settings = settings_repo.get()
-        active = focus_repo.get_active()
+        active_session = focus_repo.get_active()
         now = clock.now()
         active_quiet = quiet_repo.get_active(now)
-        active_deferral = deferral_repo.get_active(now, active.id) if active is not None else None
-        if active is None:
-            initial = InteractionState.IDLE
+        active_deferral = (
+            deferral_repo.get_active(now, active_session.id) if active_session is not None else None
+        )
+        if active_session is None:
+            self.machine = InteractionStateMachine(InteractionState.IDLE)
+        elif active_quiet is not None and active_deferral is not None:
+            self.machine = InteractionStateMachine(InteractionState.DEFERRED)
+            self.machine.transition(InteractionCommand.ENTER_QUIET)
         elif active_quiet is not None:
-            initial = InteractionState.QUIET
+            self.machine = InteractionStateMachine(InteractionState.FOCUSING)
+            self.machine.transition(InteractionCommand.ENTER_QUIET)
         elif active_deferral is not None:
-            initial = InteractionState.DEFERRED
+            self.machine = InteractionStateMachine(InteractionState.DEFERRED)
         else:
-            initial = InteractionState.FOCUSING
-        self.machine = InteractionStateMachine(initial)
+            self.machine = InteractionStateMachine(InteractionState.FOCUSING)
         self.current_nudge = None
         self.policy = HumanePolicyEngine()
 
