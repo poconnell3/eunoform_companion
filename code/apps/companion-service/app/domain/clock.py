@@ -17,9 +17,7 @@ class SystemClock:
 
 class FixedClock:
     def __init__(self, current: datetime) -> None:
-        if current.tzinfo is None:
-            raise ValueError("FixedClock requires a timezone-aware datetime.")
-        self._current = current.astimezone(UTC)
+        self.set(current)
 
     def now(self) -> datetime:
         return self._current

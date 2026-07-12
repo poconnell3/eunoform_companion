@@ -43,40 +43,27 @@ class InvalidTransitionError(ValueError):
 
 _TRANSITIONS: dict[tuple[InteractionState, InteractionCommand], InteractionState] = {
     (InteractionState.IDLE, InteractionCommand.START_FOCUS): InteractionState.FOCUSING,
-    (InteractionState.FOCUSING, InteractionCommand.THRESHOLD_REACHED): (
-        InteractionState.POLICY_EVALUATION
-    ),
+    (InteractionState.FOCUSING, InteractionCommand.THRESHOLD_REACHED): InteractionState.POLICY_EVALUATION,
     (InteractionState.FOCUSING, InteractionCommand.STOP_FOCUS): InteractionState.IDLE,
+    (InteractionState.POLICY_EVALUATION, InteractionCommand.STOP_FOCUS): InteractionState.IDLE,
+    (InteractionState.ATTRACTING_ATTENTION, InteractionCommand.STOP_FOCUS): InteractionState.IDLE,
+    (InteractionState.AWAITING_RESPONSE, InteractionCommand.STOP_FOCUS): InteractionState.IDLE,
+    (InteractionState.EXPLAINING, InteractionCommand.STOP_FOCUS): InteractionState.IDLE,
+    (InteractionState.QUIET, InteractionCommand.STOP_FOCUS): InteractionState.IDLE,
     (InteractionState.FOCUSING, InteractionCommand.ENTER_QUIET): InteractionState.QUIET,
-    (InteractionState.POLICY_EVALUATION, InteractionCommand.POLICY_ALLOWS): (
-        InteractionState.ATTRACTING_ATTENTION
-    ),
-    (InteractionState.POLICY_EVALUATION, InteractionCommand.POLICY_BLOCKS): (
-        InteractionState.FOCUSING
-    ),
-    (InteractionState.ATTRACTING_ATTENTION, InteractionCommand.VISUAL_CUE_COMPLETE): (
-        InteractionState.AWAITING_RESPONSE
-    ),
-    (InteractionState.ATTRACTING_ATTENTION, InteractionCommand.CANCEL): (
-        InteractionState.FOCUSING
-    ),
-    (InteractionState.ATTRACTING_ATTENTION, InteractionCommand.ENTER_QUIET): (
-        InteractionState.QUIET
-    ),
+    (InteractionState.POLICY_EVALUATION, InteractionCommand.POLICY_ALLOWS): InteractionState.ATTRACTING_ATTENTION,
+    (InteractionState.POLICY_EVALUATION, InteractionCommand.POLICY_BLOCKS): InteractionState.FOCUSING,
+    (InteractionState.ATTRACTING_ATTENTION, InteractionCommand.VISUAL_CUE_COMPLETE): InteractionState.AWAITING_RESPONSE,
+    (InteractionState.ATTRACTING_ATTENTION, InteractionCommand.CANCEL): InteractionState.FOCUSING,
+    (InteractionState.ATTRACTING_ATTENTION, InteractionCommand.ENTER_QUIET): InteractionState.QUIET,
     (InteractionState.AWAITING_RESPONSE, InteractionCommand.ACCEPT): InteractionState.ON_BREAK,
     (InteractionState.AWAITING_RESPONSE, InteractionCommand.DEFER): InteractionState.DEFERRED,
     (InteractionState.AWAITING_RESPONSE, InteractionCommand.DISMISS): InteractionState.FOCUSING,
     (InteractionState.AWAITING_RESPONSE, InteractionCommand.ASK_WHY): InteractionState.EXPLAINING,
-    (InteractionState.AWAITING_RESPONSE, InteractionCommand.REDUCE_FREQUENCY): (
-        InteractionState.FOCUSING
-    ),
+    (InteractionState.AWAITING_RESPONSE, InteractionCommand.REDUCE_FREQUENCY): InteractionState.FOCUSING,
     (InteractionState.AWAITING_RESPONSE, InteractionCommand.ENTER_QUIET): InteractionState.QUIET,
-    (InteractionState.EXPLAINING, InteractionCommand.EXPLANATION_COMPLETE): (
-        InteractionState.AWAITING_RESPONSE
-    ),
-    (InteractionState.DEFERRED, InteractionCommand.DEFERRAL_EXPIRES): (
-        InteractionState.POLICY_EVALUATION
-    ),
+    (InteractionState.EXPLAINING, InteractionCommand.EXPLANATION_COMPLETE): InteractionState.AWAITING_RESPONSE,
+    (InteractionState.DEFERRED, InteractionCommand.DEFERRAL_EXPIRES): InteractionState.POLICY_EVALUATION,
     (InteractionState.DEFERRED, InteractionCommand.STOP_FOCUS): InteractionState.IDLE,
     (InteractionState.DEFERRED, InteractionCommand.ENTER_QUIET): InteractionState.QUIET,
     (InteractionState.ON_BREAK, InteractionCommand.RESUME_FOCUS): InteractionState.FOCUSING,
@@ -89,37 +76,38 @@ class InteractionStateMachine:
 
     def __init__(self, initial_state: InteractionState = InteractionState.IDLE) -> None:
         self._state = initial_state
-        self._state_before_quiet: InteractionState = InteractionState.IDLE
+        self._state_before_quiet = (
+            InteractionState.FOCUSING if initial_state is InteractionState.QUIET else InteractionState.IDLE
+        )
 
     @property
     def state(self) -> InteractionState:
         return self._state
 
+    def can_transition(self, command: InteractionCommand) -> bool:
+        if self._state is InteractionState.QUIET and command is InteractionCommand.EXIT_QUIET:
+            return True
+        return (self._state, command) in _TRANSITIONS
+
+    def require_transition(self, command: InteractionCommand) -> None:
+        if not self.can_transition(command):
+            raise InvalidTransitionError(
+                f"Command {command.value!r} is invalid while in state {self._state.value!r}."
+            )
+
     def transition(self, command: InteractionCommand) -> InteractionState:
+        self.require_transition(command)
         if command is InteractionCommand.ENTER_QUIET and self._state is not InteractionState.QUIET:
             self._state_before_quiet = self._safe_quiet_return_state(self._state)
-
         if self._state is InteractionState.QUIET and command is InteractionCommand.EXIT_QUIET:
             self._state = self._state_before_quiet
             return self._state
-
-        try:
-            next_state = _TRANSITIONS[(self._state, command)]
-        except KeyError as exc:
-            raise InvalidTransitionError(
-                f"Command {command.value!r} is invalid while in state {self._state.value!r}."
-            ) from exc
-
-        self._state = next_state
+        self._state = _TRANSITIONS[(self._state, command)]
         return self._state
 
     @staticmethod
     def _safe_quiet_return_state(state: InteractionState) -> InteractionState:
-        if state in {
-            InteractionState.FOCUSING,
-            InteractionState.DEFERRED,
-            InteractionState.ON_BREAK,
-        }:
+        if state in {InteractionState.FOCUSING, InteractionState.DEFERRED, InteractionState.ON_BREAK}:
             return state
         if state is InteractionState.IDLE:
             return InteractionState.IDLE

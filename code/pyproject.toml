@@ -1,13 +1,24 @@
 [project]
 name = "eunoform-companion"
-version = "0.1.0"
-description = "Humane, deterministic policy core for the Eunoform Companion"
+version = "0.2.0"
+description = "Humane, deterministic local companion service"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "fastapi>=0.128,<1",
+  "pydantic>=2.13,<3",
+  "uvicorn>=0.48,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8,<10",
+]
 
 [dependency-groups]
 dev = [
-  "pytest>=8.0,<9",
+  "httpx>=0.28,<1",
+  "pytest>=8,<10",
 ]
 
 [tool.pytest.ini_options]

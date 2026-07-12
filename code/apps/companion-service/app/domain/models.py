@@ -1,4 +1,4 @@
-"""Core domain entities for the Phase 1 companion service."""
+"""Core domain entities for the Eunoform Companion service."""
 
 from __future__ import annotations
 
@@ -84,8 +84,10 @@ class FocusSession:
 
     def __post_init__(self) -> None:
         self.started_at = ensure_utc(self.started_at)
-        if self.ended_at is not None:
-            self.ended_at = ensure_utc(self.ended_at)
+        for name in ("ended_at", "initial_nudge_at", "last_nudge_at", "next_eligible_nudge_at"):
+            value = getattr(self, name)
+            if value is not None:
+                setattr(self, name, ensure_utc(value))
 
     @property
     def is_active(self) -> bool:

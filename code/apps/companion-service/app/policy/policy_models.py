@@ -1,14 +1,10 @@
 """Inputs and outputs for the deterministic Humane Policy Engine."""
-
 from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-
 from app.domain.interaction_state import InteractionState
 from app.domain.models import Deferral, FocusSession, QuietInterval, UserSettings
-
 
 class PolicyReason(StrEnum):
     ALLOWED_EXPLICIT_REMINDER = "allowed_explicit_reminder"
@@ -23,7 +19,6 @@ class PolicyReason(StrEnum):
     BLOCKED_NUDGES_DISABLED = "blocked_nudges_disabled"
     BLOCKED_THRESHOLD_NOT_REACHED = "blocked_threshold_not_reached"
 
-
 @dataclass(frozen=True, slots=True)
 class PolicyContext:
     now: datetime
@@ -35,7 +30,6 @@ class PolicyContext:
     explicit_reminder_due: bool = False
     user_cancelled: bool = False
 
-
 @dataclass(frozen=True, slots=True)
 class PolicyDecision:
     allowed: bool
@@ -43,35 +37,9 @@ class PolicyDecision:
     elapsed_minutes: int = 0
     threshold_minutes: int = 0
     next_eligible_at: datetime | None = None
-
     @classmethod
-    def allow(
-        cls,
-        reason: PolicyReason,
-        *,
-        elapsed_minutes: int,
-        threshold_minutes: int,
-    ) -> "PolicyDecision":
-        return cls(
-            allowed=True,
-            reason=reason,
-            elapsed_minutes=elapsed_minutes,
-            threshold_minutes=threshold_minutes,
-        )
-
+    def allow(cls, reason: PolicyReason, *, elapsed_minutes: int, threshold_minutes: int) -> "PolicyDecision":
+        return cls(True, reason, elapsed_minutes, threshold_minutes)
     @classmethod
-    def block(
-        cls,
-        reason: PolicyReason,
-        *,
-        elapsed_minutes: int = 0,
-        threshold_minutes: int = 0,
-        next_eligible_at: datetime | None = None,
-    ) -> "PolicyDecision":
-        return cls(
-            allowed=False,
-            reason=reason,
-            elapsed_minutes=elapsed_minutes,
-            threshold_minutes=threshold_minutes,
-            next_eligible_at=next_eligible_at,
-        )
+    def block(cls, reason: PolicyReason, *, elapsed_minutes: int = 0, threshold_minutes: int = 0, next_eligible_at: datetime | None = None) -> "PolicyDecision":
+        return cls(False, reason, elapsed_minutes, threshold_minutes, next_eligible_at)
