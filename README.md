@@ -82,9 +82,10 @@ The companion is **caring, gentle, friendly, and humane**. It:
 | [docs/03_02_AI_Model_Selection.md](docs/03_02_AI_Model_Selection.md) | Model evaluation and deployment guide |
 | [docs/04_MVP_Specification.md](docs/04_MVP_Specification.md) | First testable humane interaction loop, scope, policy rules, and acceptance criteria |
 | [docs/05_Phase_1_Implementation_Notes.md](docs/05_Phase_1_Implementation_Notes.md) | Domain models, state machine, persistence, and Humane Policy Engine implementation notes |
+| [docs/06_Phase_2_API_Implementation_Notes.md](docs/06_Phase_2_API_Implementation_Notes.md) | Local FastAPI interface, endpoints, and testing notes |
 
 ---
 
 ## Status
 
-> Phase 1 domain and policy core implemented. The local API and body simulator are next.
+> Phase 2 local API implemented and tested. The visual body simulator is next.

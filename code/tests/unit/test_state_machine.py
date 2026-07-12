@@ -1,5 +1,4 @@
 import pytest
-
 from app.domain.interaction_state import (
     InteractionCommand,
     InteractionState,

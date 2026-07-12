@@ -38,6 +38,7 @@ class NudgeOutcome(StrEnum):
     DISMISSED = "dismissed"
     QUIETED = "quieted"
     FREQUENCY_REDUCED = "frequency_reduced"
+    SESSION_ENDED = "session_ended"
 
 
 @dataclass(slots=True)
@@ -147,7 +148,9 @@ class QuietInterval:
     def __post_init__(self) -> None:
         self.started_at = ensure_utc(self.started_at)
         self.ends_at = ensure_utc(self.ends_at)
-        if self.ends_at <= self.started_at:
+        if self.ends_at < self.started_at or (
+            self.status == "active" and self.ends_at == self.started_at
+        ):
             raise ValueError("Quiet interval must end after it begins.")
 
     def is_active_at(self, now: datetime) -> bool:

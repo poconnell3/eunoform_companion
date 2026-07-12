@@ -13,12 +13,14 @@ dependencies = [
 dev = [
   "httpx>=0.28,<1",
   "pytest>=8,<10",
+  "ruff>=0.12,<1",
 ]
 
 [dependency-groups]
 dev = [
   "httpx>=0.28,<1",
   "pytest>=8,<10",
+  "ruff>=0.12,<1",
 ]
 
 [tool.pytest.ini_options]

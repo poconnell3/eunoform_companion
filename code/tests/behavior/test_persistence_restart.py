@@ -1,13 +1,12 @@
 from datetime import UTC, datetime
 
-from app.domain.models import InteractionIntensity, NudgeEvent, UserSettings
+from app.domain.models import FocusSession, InteractionIntensity, NudgeEvent, UserSettings
 from app.persistence.database import Database
 from app.persistence.repositories import (
     SQLiteFocusSessionRepository,
     SQLiteNudgeRepository,
     SQLiteSettingsRepository,
 )
-from app.domain.models import FocusSession
 
 
 def test_settings_session_and_nudge_survive_restart(tmp_path) -> None:

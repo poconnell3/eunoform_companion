@@ -1,7 +1,17 @@
 """Explain policy facts without inventing inferred human states."""
+
 from app.domain.models import ExplanationFacts
+
+
 class ExplanationService:
     @staticmethod
-    def format(facts:ExplanationFacts)->str:
-        p=lambda m:f"{m} {'minute' if m==1 else 'minutes'}"
-        return f"You started this focus session {p(facts.elapsed_minutes)} ago, and your break-check interval is {p(facts.threshold_minutes)}."
+    def format(facts: ExplanationFacts) -> str:
+        def minutes(value: int) -> str:
+            return f"{value} {'minute' if value == 1 else 'minutes'}"
+
+        elapsed = minutes(facts.elapsed_minutes)
+        threshold = minutes(facts.threshold_minutes)
+        return (
+            f"You started this focus session {elapsed} ago, "
+            f"and your break-check interval is {threshold}."
+        )
