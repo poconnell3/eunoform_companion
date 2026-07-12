@@ -1,0 +1,17 @@
+{
+  "name": "eunoform-companion-workspace",
+  "private": true,
+  "packageManager": "npm@11.12.1",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "npm --workspace @eunoform/body-simulator run dev",
+    "build": "npm --workspace @eunoform/body-simulator run build",
+    "lint": "npm --workspace @eunoform/body-simulator run lint",
+    "test": "npm --workspace @eunoform/body-simulator run test"
+  },
+  "workspaces": [
+    "code/apps/body-simulator"
+  ]
+}

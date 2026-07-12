@@ -92,11 +92,12 @@ The companion is **caring, gentle, friendly, and humane**. It:
 | [docs/03_01_Technical_Architecture_Expanded.md](docs/03_01_Technical_Architecture_Expanded.md) | Full hardware and system design recommendations |
 | [docs/03_02_AI_Model_Selection.md](docs/03_02_AI_Model_Selection.md) | Model evaluation and deployment guide |
 | [docs/04_MVP_Specification.md](docs/04_MVP_Specification.md) | First testable humane interaction loop, scope, policy rules, and acceptance criteria |
-| [docs/05_Phase_1_Implementation_Notes.md](docs/05_Phase_1_Implementation_Notes.md) | Domain models, state machine, persistence, and Humane Policy Engine implementation notes |
+| [code/docs/05_Phase_1_Implementation_Notes.md](code/docs/05_Phase_1_Implementation_Notes.md) | Domain models, state machine, persistence, and Humane Policy Engine implementation notes |
 | [docs/06_Phase_2_API_Implementation_Notes.md](docs/06_Phase_2_API_Implementation_Notes.md) | Local FastAPI interface, endpoints, and testing notes |
+| [docs/07_Phase_3_Visual_Simulator_Implementation_Notes.md](docs/07_Phase_3_Visual_Simulator_Implementation_Notes.md) | Node.js visual body simulator, semantic behaviors, and local API integration |
 
 ---
 
 ## Status
 
-> Phase 2 local API implemented and tested. The visual body simulator is next.
+> Phase 3 visual body simulator implemented and tested. Background scheduling, voice, model integration, and physical hardware remain deferred.
