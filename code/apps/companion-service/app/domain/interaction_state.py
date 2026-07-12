@@ -33,6 +33,7 @@ class InteractionCommand(StrEnum):
     ENTER_QUIET = "enter_quiet"
     EXIT_QUIET = "exit_quiet"
     DEFERRAL_EXPIRES = "deferral_expires"
+    RECONCILE_DEFERRAL_EXPIRATION = "reconcile_deferral_expiration"
     RESUME_FOCUS = "resume_focus"
     CANCEL = "cancel"
 
@@ -85,6 +86,10 @@ _TRANSITIONS: dict[tuple[InteractionState, InteractionCommand], InteractionState
         InteractionState.DEFERRED,
         InteractionCommand.DEFERRAL_EXPIRES,
     ): InteractionState.POLICY_EVALUATION,
+    (
+        InteractionState.DEFERRED,
+        InteractionCommand.RECONCILE_DEFERRAL_EXPIRATION,
+    ): InteractionState.FOCUSING,
     (InteractionState.DEFERRED, InteractionCommand.STOP_FOCUS): InteractionState.IDLE,
     (InteractionState.DEFERRED, InteractionCommand.ENTER_QUIET): InteractionState.QUIET,
     (InteractionState.ON_BREAK, InteractionCommand.RESUME_FOCUS): InteractionState.FOCUSING,

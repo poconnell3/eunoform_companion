@@ -14,6 +14,7 @@ from app.domain.interaction_state import (
 from app.domain.models import (
     Deferral,
     ExplanationFacts,
+    FocusSession,
     NudgeEvent,
     NudgeOutcome,
     QuietInterval,
@@ -27,7 +28,7 @@ from app.persistence.repositories import (
     SQLiteSettingsRepository,
 )
 from app.policy.humane_policy_engine import HumanePolicyEngine
-from app.policy.policy_models import PolicyContext
+from app.policy.policy_models import PolicyContext, PolicyDecision
 from app.services.explanation_service import ExplanationService
 from app.services.focus_session_service import FocusSessionService
 
@@ -53,7 +54,7 @@ class CompanionApplicationService:
         active = focus_repo.get_active()
         now = clock.now()
         active_quiet = quiet_repo.get_active(now)
-        active_deferral = deferral_repo.get_active(now)
+        active_deferral = deferral_repo.get_active(now, active.id) if active is not None else None
         if active is None:
             initial = InteractionState.IDLE
         elif active_quiet is not None:
@@ -66,31 +67,41 @@ class CompanionApplicationService:
         self.current_nudge = None
         self.policy = HumanePolicyEngine()
 
-    def _focus_service(self):
+    def _focus_service(self) -> FocusSessionService:
         return FocusSessionService(self.focus_repo, self.clock, self.settings)
 
-    def start_focus(self):
-        s = self._focus_service().start()
+    def start_focus(self) -> FocusSession:
+        session = self._focus_service().start()
         self.machine.transition(InteractionCommand.START_FOCUS)
-        return s
+        return session
 
-    def stop_focus(self):
+    def stop_focus(self) -> FocusSession:
+        self.machine.require_transition(InteractionCommand.STOP_FOCUS)
+        active_session = self.focus_repo.get_active()
+        if active_session is None:
+            raise ValueError("No active focus session exists.")
+        now = self.clock.now()
         if self.current_nudge is not None and self.current_nudge.outcome is NudgeOutcome.PENDING:
             self.current_nudge.outcome = NudgeOutcome.SESSION_ENDED
             self.nudge_repo.save(self.current_nudge)
-        s = self._focus_service().stop()
+        self.quiet_repo.end_active(now, status="cancelled")
+        self.deferral_repo.end_active(now, active_session.id, status="cancelled")
+        session = self._focus_service().stop()
         self.machine.transition(InteractionCommand.STOP_FOCUS)
         self.current_nudge = None
-        return s
+        return session
 
     def resume_focus(self):
         self.machine.transition(InteractionCommand.RESUME_FOCUS)
         return self.status()
 
-    def evaluate(self, explicit_reminder_due=False):
+    def evaluate(self, explicit_reminder_due: bool = False) -> PolicyDecision:
         self.reconcile_timed_state()
         if self.machine.state is InteractionState.DEFERRED:
-            d = self.deferral_repo.get_active(self.clock.now())
+            active_session = self.focus_repo.get_active()
+            d = self.deferral_repo.get_active(
+                self.clock.now(), active_session.id if active_session else None
+            )
             if d is not None:
                 raise ValueError("The active deferral has not expired.")
             self.machine.transition(InteractionCommand.DEFERRAL_EXPIRES)
@@ -108,7 +119,7 @@ class CompanionApplicationService:
                 settings=self.settings,
                 interaction_state=InteractionState.FOCUSING,
                 focus_session=session,
-                active_deferral=self.deferral_repo.get_active(now),
+                active_deferral=self.deferral_repo.get_active(now, session.id if session else None),
                 active_quiet_interval=self.quiet_repo.get_active(now),
                 explicit_reminder_due=explicit_reminder_due,
             )
@@ -150,7 +161,7 @@ class CompanionApplicationService:
         self.machine.transition(InteractionCommand.ACCEPT)
         return self.status()
 
-    def defer(self, minutes: int):
+    def defer(self, minutes: int) -> Deferral:
         e = self._require_nudge()
         self.machine.require_transition(InteractionCommand.DEFER)
         now = self.clock.now()
@@ -175,7 +186,7 @@ class CompanionApplicationService:
         self.machine.transition(InteractionCommand.DISMISS)
         return self.status()
 
-    def quiet(self, minutes: int):
+    def quiet(self, minutes: int) -> QuietInterval:
         self.machine.require_transition(InteractionCommand.ENTER_QUIET)
         now = self.clock.now()
         q = QuietInterval(started_at=now, ends_at=now + timedelta(minutes=minutes))
@@ -229,17 +240,28 @@ class CompanionApplicationService:
         self.settings_repo.save(self.settings)
         return self.settings
 
-    def reconcile_timed_state(self):
-        if self.machine.state is not InteractionState.QUIET:
-            return
+    def reconcile_timed_state(self) -> None:
         now = self.clock.now()
-        if self.quiet_repo.get_active(now) is not None:
+        active_session = self.focus_repo.get_active()
+        self.quiet_repo.expire_active(now)
+        self.deferral_repo.expire_active(now)
+        if active_session is None:
+            self.quiet_repo.end_active(now, status="cancelled")
+            self.deferral_repo.end_active(now, status="cancelled")
+            if self.machine.state is not InteractionState.IDLE and self.machine.can_transition(
+                InteractionCommand.STOP_FOCUS
+            ):
+                self.machine.transition(InteractionCommand.STOP_FOCUS)
             return
-        self.machine.transition(InteractionCommand.EXIT_QUIET)
-        if self.focus_repo.get_active() is None and self.machine.state is not InteractionState.IDLE:
-            self.machine.transition(InteractionCommand.STOP_FOCUS)
+        if self.machine.state is InteractionState.QUIET and self.quiet_repo.get_active(now) is None:
+            self.machine.transition(InteractionCommand.EXIT_QUIET)
+        if (
+            self.machine.state is InteractionState.DEFERRED
+            and self.deferral_repo.get_active(now, active_session.id) is None
+        ):
+            self.machine.transition(InteractionCommand.RECONCILE_DEFERRAL_EXPIRATION)
 
-    def status(self):
+    def status(self) -> dict[str, object]:
         self.reconcile_timed_state()
         now = self.clock.now()
         session = self.focus_repo.get_active()
@@ -249,7 +271,9 @@ class CompanionApplicationService:
             "elapsed_minutes": 0
             if session is None
             else int(session.elapsed(now).total_seconds() // 60),
-            "active_deferral": self.deferral_repo.get_active(now),
+            "active_deferral": self.deferral_repo.get_active(
+                now, session.id if session is not None else None
+            ),
             "active_quiet_interval": self.quiet_repo.get_active(now),
             "current_nudge": self.current_nudge,
             "settings": self.settings,

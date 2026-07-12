@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -18,6 +19,20 @@ def advance_to_nudge(client, clock):
     r = client.post("/interactions/evaluate", json={})
     assert r.status_code == 200 and r.json()["allowed"] is True
     assert client.post("/interactions/current/attention-complete").status_code == 200
+
+
+def assert_timed_state_consistent(status: dict) -> None:
+    is_quiet = status["interaction_state"] == "quiet"
+    is_deferred = status["interaction_state"] == "deferred"
+    assert is_quiet is (status["active_quiet_interval"] is not None)
+    assert is_deferred is (status["active_deferral"] is not None)
+
+
+def persisted_status(database_path: Path, table: str) -> str:
+    with sqlite3.connect(database_path) as connection:
+        row = connection.execute(f"SELECT status FROM {table} LIMIT 1").fetchone()
+    assert row is not None
+    return row[0]
 
 
 def test_initial_status_is_idle(tmp_path):
@@ -177,3 +192,78 @@ def test_stopping_focus_marks_pending_nudge_session_ended(tmp_path):
         assert status["focus_session"] is None
         assert status["current_nudge"] is None
         assert c.get("/events").json()[0]["outcome"] == "session_ended"
+
+
+def test_stopping_focus_during_quiet_ends_quiet_interval(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    clock = FixedClock(START)
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        client.post("/focus-sessions")
+        client.post("/interactions/current/quiet", json={"minutes": 60})
+        status = client.post("/focus-sessions/current/stop").json()
+        assert status["interaction_state"] == "idle"
+        assert status["focus_session"] is None
+        assert_timed_state_consistent(status)
+    assert persisted_status(database_path, "quiet_intervals") == "cancelled"
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        assert_timed_state_consistent(client.get("/status").json())
+        client.post("/focus-sessions")
+        clock.set(START + timedelta(minutes=45))
+        decision = client.post("/interactions/evaluate", json={}).json()
+        assert decision["allowed"] is True
+        assert decision["reason"] != "blocked_quiet_mode"
+
+
+def test_stopping_focus_during_deferral_ends_deferral(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    clock = FixedClock(START)
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        advance_to_nudge(client, clock)
+        client.post("/interactions/current/defer", json={"minutes": 10})
+        status = client.post("/focus-sessions/current/stop").json()
+        assert status["interaction_state"] == "idle"
+        assert status["focus_session"] is None
+        assert_timed_state_consistent(status)
+    assert persisted_status(database_path, "deferrals") == "cancelled"
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        assert_timed_state_consistent(client.get("/status").json())
+
+
+def test_deferral_from_ended_session_does_not_block_new_session(tmp_path):
+    clock = FixedClock(START)
+    with client_for(tmp_path, clock) as client:
+        advance_to_nudge(client, clock)
+        client.post("/interactions/current/defer", json={"minutes": 60})
+        client.post("/focus-sessions/current/stop")
+        client.post("/focus-sessions")
+        clock.set(START + timedelta(minutes=90))
+        response = client.post("/interactions/evaluate", json={})
+        assert response.status_code == 200
+        assert response.json()["allowed"] is True
+        assert response.json()["reason"] != "blocked_active_deferral"
+
+
+def test_status_reconciles_expired_deferral(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    clock = FixedClock(START)
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        advance_to_nudge(client, clock)
+        client.post("/interactions/current/defer", json={"minutes": 10})
+        clock.set(START + timedelta(minutes=56))
+        status = client.get("/status").json()
+        assert status["interaction_state"] == "focusing"
+        assert_timed_state_consistent(status)
+    assert persisted_status(database_path, "deferrals") == "expired"
+
+
+def test_natural_quiet_expiration_is_persisted(tmp_path):
+    database_path = tmp_path / "test.sqlite3"
+    clock = FixedClock(START)
+    with TestClient(create_app(database_path=database_path, clock=clock)) as client:
+        client.post("/focus-sessions")
+        client.post("/interactions/current/quiet", json={"minutes": 10})
+        clock.set(START + timedelta(minutes=11))
+        status = client.get("/status").json()
+        assert status["interaction_state"] == "focusing"
+        assert_timed_state_consistent(status)
+    assert persisted_status(database_path, "quiet_intervals") == "expired"

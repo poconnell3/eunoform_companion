@@ -210,12 +210,19 @@ class SQLiteDeferralRepository:
                 ),
             )
 
-    def get_active(self, now):
+    def get_active(self, now: datetime, focus_session_id: str | None = None) -> Deferral | None:
+        parameters: tuple[str, ...] = (now.isoformat(),)
+        session_filter = ""
+        if focus_session_id is not None:
+            session_filter = " AND n.focus_session_id=?"
+            parameters += (focus_session_id,)
         with self.db.connect() as c:
             r = c.execute(
-                "SELECT * FROM deferrals WHERE status='active' AND expires_at>? "
-                "ORDER BY expires_at DESC LIMIT 1",
-                (now.isoformat(),),
+                "SELECT d.* FROM deferrals d "
+                "JOIN nudge_events n ON n.id=d.nudge_event_id "
+                "WHERE d.status='active' AND d.expires_at>?"
+                f"{session_filter} ORDER BY d.expires_at DESC LIMIT 1",
+                parameters,
             ).fetchone()
         return (
             Deferral(
@@ -228,6 +235,51 @@ class SQLiteDeferralRepository:
             )
             if r
             else None
+        )
+
+    def end_active(
+        self,
+        now: datetime,
+        focus_session_id: str | None = None,
+        *,
+        status: str = "ended",
+    ) -> Deferral | None:
+        active = self.get_active(now, focus_session_id)
+        if active is None:
+            return None
+        active.status = status
+        with self.db.connect() as connection:
+            connection.execute(
+                "UPDATE deferrals SET expires_at=?, status=? WHERE id=?",
+                (now.isoformat(), status, active.id),
+            )
+        active.expires_at = now
+        return active
+
+    def expire_active(self, now: datetime, focus_session_id: str | None = None) -> Deferral | None:
+        parameters: tuple[str, ...] = (now.isoformat(),)
+        session_filter = ""
+        if focus_session_id is not None:
+            session_filter = " AND n.focus_session_id=?"
+            parameters += (focus_session_id,)
+        with self.db.connect() as connection:
+            row = connection.execute(
+                "SELECT d.* FROM deferrals d "
+                "JOIN nudge_events n ON n.id=d.nudge_event_id "
+                "WHERE d.status='active' AND d.expires_at<=?"
+                f"{session_filter} ORDER BY d.expires_at DESC LIMIT 1",
+                parameters,
+            ).fetchone()
+            if row is None:
+                return None
+            connection.execute("UPDATE deferrals SET status='expired' WHERE id=?", (row["id"],))
+        return Deferral(
+            id=row["id"],
+            nudge_event_id=row["nudge_event_id"],
+            created_at=_dt(row["created_at"]),
+            duration_minutes=row["duration_minutes"],
+            expires_at=_dt(row["expires_at"]),
+            status="expired",
         )
 
 
@@ -244,7 +296,7 @@ class SQLiteQuietIntervalRepository:
                 (q.id, q.started_at.isoformat(), q.ends_at.isoformat(), q.source, q.status),
             )
 
-    def get_active(self, now):
+    def get_active(self, now: datetime) -> QuietInterval | None:
         with self.db.connect() as c:
             r = c.execute(
                 "SELECT * FROM quiet_intervals WHERE status='active' "
@@ -263,7 +315,7 @@ class SQLiteQuietIntervalRepository:
             else None
         )
 
-    def end_active(self, now):
+    def end_active(self, now: datetime, *, status: str = "ended") -> QuietInterval | None:
         with self.db.connect() as c:
             r = c.execute(
                 "SELECT * FROM quiet_intervals WHERE status='active' "
@@ -273,13 +325,33 @@ class SQLiteQuietIntervalRepository:
             if r is None:
                 return None
             c.execute(
-                "UPDATE quiet_intervals SET ends_at=?, status='ended' WHERE id=?",
-                (now.isoformat(), r["id"]),
+                "UPDATE quiet_intervals SET ends_at=?, status=? WHERE id=?",
+                (now.isoformat(), status, r["id"]),
             )
         return QuietInterval(
             id=r["id"],
             started_at=_dt(r["started_at"]),
             ends_at=now,
             source=r["source"],
-            status="ended",
+            status=status,
+        )
+
+    def expire_active(self, now: datetime) -> QuietInterval | None:
+        with self.db.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM quiet_intervals WHERE status='active' "
+                "AND ends_at<=? ORDER BY ends_at DESC LIMIT 1",
+                (now.isoformat(),),
+            ).fetchone()
+            if row is None:
+                return None
+            connection.execute(
+                "UPDATE quiet_intervals SET status='expired' WHERE id=?", (row["id"],)
+            )
+        return QuietInterval(
+            id=row["id"],
+            started_at=_dt(row["started_at"]),
+            ends_at=_dt(row["ends_at"]),
+            source=row["source"],
+            status="expired",
         )
