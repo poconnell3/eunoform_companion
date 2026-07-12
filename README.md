@@ -41,6 +41,17 @@ This boundary keeps the physical companion small, cool, and inexpensive while al
 
 ---
 
+## Runtime Standards
+
+Eunoform Companion uses a polyglot local architecture.
+
+- **Python 3.11+** powers the deterministic companion API, policy engine, persistence layer, and application services.
+- **Node.js 24** is required for all JavaScript and TypeScript applications, including the Phase 3 visual body simulator and future interface tooling.
+
+Node.js 20 and earlier are not supported for new project components. The repository root includes `.nvmrc` and `.node-version` so supported runtime managers and development tools select Node.js 24 automatically.
+
+---
+
 ## AI Model Stack
 
 The companion uses **several specialized models**, not one large general-purpose model:

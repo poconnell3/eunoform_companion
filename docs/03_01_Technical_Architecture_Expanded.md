@@ -277,6 +277,16 @@ This build is enough to validate the project’s most important questions: Does 
 
 ## 3. Software Language and Library Recommendations
 
+### Runtime Boundary
+
+Eunoform Companion uses a polyglot local architecture with explicit runtime responsibilities:
+
+- **Authoritative backend:** Python 3.11+ and FastAPI provide the deterministic companion service, including the policy engine, persistence, domain model, and application services.
+- **Interactive simulator and frontend:** Node.js 24 and TypeScript are required for the future visual body simulator and JavaScript-based interface tooling. Each JavaScript or TypeScript package must declare Node `>=24 <25` in its `engines` field.
+- **Communication boundary:** Interactive applications communicate with the Python companion service through its local HTTP API. They do not replace or bypass the authoritative Python domain and policy layers.
+
+Future Node-based containers should use `node:24-bookworm-slim` by default. Python service containers should continue to use an appropriate Python base image.
+
 ### 3.1 Primary Application Language: Python
 
 Use **Python** for the companion service.
