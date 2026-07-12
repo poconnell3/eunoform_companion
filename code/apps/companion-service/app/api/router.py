@@ -44,6 +44,7 @@ def status_payload(service):
         "active_deferral": serialize(s["active_deferral"]),
         "active_quiet_interval": serialize(s["active_quiet_interval"]),
         "current_nudge": serialize(s["current_nudge"]),
+        "next_evaluation_at": s["next_evaluation_at"],
         "settings": serialize(s["settings"]),
     }
 

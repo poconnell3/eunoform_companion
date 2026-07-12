@@ -1,7 +1,9 @@
 import sqlite3
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from app.domain.clock import FixedClock
 from app.domain.models import Deferral
 from app.main import create_app
@@ -43,11 +45,102 @@ def persisted_status(database_path: Path, table: str) -> str:
     return row[0]
 
 
+def wait_for_state(client: TestClient, expected: str, timeout: float = 1.0) -> dict:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        status = client.get("/status").json()
+        if status["interaction_state"] == expected:
+            return status
+        time.sleep(0.01)
+    raise AssertionError(f"Timed out waiting for state {expected!r}.")
+
+
 def test_initial_status_is_idle(tmp_path):
     with client_for(tmp_path, FixedClock(START)) as c:
         r = c.get("/status")
         assert r.status_code == 200
         assert r.json()["interaction_state"] == "idle"
+
+
+def test_scheduler_automatically_starts_due_attention(tmp_path):
+    clock = FixedClock(START)
+    app = create_app(
+        database_path=tmp_path / "automatic.sqlite3",
+        clock=clock,
+        scheduler_interval_seconds=0.01,
+    )
+    with TestClient(app) as client:
+        started = client.post("/focus-sessions").json()
+        assert datetime.fromisoformat(started["next_evaluation_at"]) == START + timedelta(
+            minutes=45
+        )
+        clock.set(START + timedelta(minutes=45))
+        status = wait_for_state(client, "attracting_attention")
+        assert status["current_nudge"]["policy_reason"] == "allowed_wellness_threshold"
+
+
+def test_scheduler_turns_expired_deferral_into_explicit_reminder(tmp_path):
+    clock = FixedClock(START)
+    app = create_app(
+        database_path=tmp_path / "deferral.sqlite3",
+        clock=clock,
+        scheduler_interval_seconds=0.01,
+    )
+    with TestClient(app) as client:
+        client.post("/focus-sessions")
+        clock.set(START + timedelta(minutes=45))
+        wait_for_state(client, "attracting_attention")
+        client.post("/interactions/current/attention-complete")
+        deferred = client.post("/interactions/current/defer", json={"minutes": 10}).json()
+        assert datetime.fromisoformat(deferred["next_evaluation_at"]) == START + timedelta(
+            minutes=55
+        )
+        clock.set(START + timedelta(minutes=56))
+        status = wait_for_state(client, "attracting_attention")
+        assert status["current_nudge"]["policy_reason"] == "allowed_explicit_reminder"
+
+
+def test_scheduler_can_be_disabled_for_deterministic_hosts(tmp_path):
+    clock = FixedClock(START)
+    app = create_app(
+        database_path=tmp_path / "disabled.sqlite3",
+        clock=clock,
+        scheduler_enabled=False,
+    )
+    with TestClient(app) as client:
+        client.post("/focus-sessions")
+        clock.set(START + timedelta(minutes=45))
+        time.sleep(0.03)
+        assert client.get("/status").json()["interaction_state"] == "focusing"
+
+
+def test_scheduler_rejects_non_positive_interval(tmp_path):
+    with pytest.raises(ValueError, match="greater than zero"):
+        create_app(
+            database_path=tmp_path / "invalid.sqlite3",
+            scheduler_interval_seconds=0,
+        )
+
+
+def test_scheduler_recovers_expired_deferral_after_restart(tmp_path):
+    database_path = tmp_path / "restart.sqlite3"
+    clock = FixedClock(START)
+    with TestClient(
+        create_app(database_path=database_path, clock=clock, scheduler_enabled=False)
+    ) as client:
+        advance_to_nudge(client, clock)
+        client.post("/interactions/current/defer", json={"minutes": 10})
+        clock.set(START + timedelta(minutes=56))
+        assert client.get("/status").json()["interaction_state"] == "focusing"
+    with TestClient(
+        create_app(
+            database_path=database_path,
+            clock=clock,
+            scheduler_interval_seconds=0.01,
+        )
+    ) as client:
+        status = wait_for_state(client, "attracting_attention")
+        assert status["current_nudge"]["policy_reason"] == "allowed_explicit_reminder"
 
 
 def test_start_and_duplicate_start(tmp_path):

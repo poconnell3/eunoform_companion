@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -17,12 +18,19 @@ from app.persistence.repositories import (
     SQLiteQuietIntervalRepository,
     SQLiteSettingsRepository,
 )
+from app.services.background_scheduler import run_scheduler
 from app.services.companion_application_service import CompanionApplicationService
 
 
 def create_app(
-    *, database_path: str | Path = "eunoform_companion.sqlite3", clock: Clock | None = None
+    *,
+    database_path: str | Path = "eunoform_companion.sqlite3",
+    clock: Clock | None = None,
+    scheduler_enabled: bool = True,
+    scheduler_interval_seconds: float = 1.0,
 ) -> FastAPI:
+    if scheduler_interval_seconds <= 0:
+        raise ValueError("Scheduler interval must be greater than zero.")
     db = Database(database_path)
 
     @asynccontextmanager
@@ -39,11 +47,25 @@ def create_app(
             deferral_repo=SQLiteDeferralRepository(db),
             quiet_repo=SQLiteQuietIntervalRepository(db),
         )
-        yield
+        scheduler_task = None
+        if scheduler_enabled:
+            scheduler_task = asyncio.create_task(
+                run_scheduler(
+                    app.state.companion_service,
+                    interval_seconds=scheduler_interval_seconds,
+                )
+            )
+        try:
+            yield
+        finally:
+            if scheduler_task is not None:
+                scheduler_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await scheduler_task
 
     app = FastAPI(
         title="Eunoform Companion API",
-        version="0.2.0",
+        version="0.4.0",
         description="Local deterministic API for focus sessions and humane interactions.",
         lifespan=lifespan,
     )

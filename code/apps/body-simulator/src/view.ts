@@ -33,6 +33,7 @@ export const appMarkup = `
         <div><span>GESTURE</span><strong id="gesture-value">still</strong></div>
         <div><span>MODE</span><strong id="mode-value">live API</strong></div>
         <div><span>SOUND</span><strong id="sound-value">available</strong></div>
+        <div><span>NEXT CHECK</span><strong id="next-check-value">not scheduled</strong></div>
       </aside>
     </section>
     <section id="controls" class="control-deck" aria-labelledby="controls-title">
@@ -79,6 +80,9 @@ export class CompanionView implements AnimationTarget {
     required("#state-value").textContent = status.interaction_state.replaceAll("_", " ");
     required("#mode-value").textContent = isMock ? "mock data" : "live API";
     required("#sound-value").textContent = status.settings.muted ? "muted" : status.interaction_state === "quiet" ? "quiet" : "available";
+    required("#next-check-value").textContent = status.next_evaluation_at
+      ? new Date(status.next_evaluation_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : "not scheduled";
     required("#elapsed-label").textContent = status.focus_session ? `${status.elapsed_minutes} minutes in this focus session.` : "Ready when you are.";
     required("#announcer").textContent = behavior.announcement;
     document.body.dataset.state = status.interaction_state;
